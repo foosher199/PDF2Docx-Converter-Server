@@ -1,0 +1,13 @@
+# Web 框架
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+
+# PDF → Word 转换（MIT 协议）
+pdf2docx>=0.5.13
+
+# PDF 校验（BSD/Apache-2.0，可商用）
+pypdfium2>=4.30.0
+
+# PyMuPDF 由 pdf2docx 自动安装（AGPL-3.0，进程隔离）
+# PyMuPDF>=1.23.0
