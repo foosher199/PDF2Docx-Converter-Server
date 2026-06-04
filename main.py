@@ -20,6 +20,10 @@ app = FastAPI(
     version="1.0.0",
 )
 
+MAX_FILE_SIZE = int(os.environ.get("MAX_FILE_SIZE", "52428800"))  # default 50MB
+CHUNK_SIZE = 64 * 1024  # 64KB
+MAX_PAGES = int(os.environ.get("MAX_PAGES", "100"))
+
 
 @app.get("/health")
 def health_check():
@@ -38,22 +42,37 @@ def convert_pdf(file: UploadFile = File(...)):
     pdf_path = os.path.join(tmpdir, "input.pdf")
     output_path = os.path.join(tmpdir, "output.docx")
 
-    content = file.file.read()
-    with open(pdf_path, "wb") as f:
-        f.write(content)
+    try:
+        # 分块流式写入磁盘，并限制总大小
+        total_size = 0
+        with open(pdf_path, "wb") as pdf_file:
+            while chunk := file.file.read(CHUNK_SIZE):
+                total_size += len(chunk)
+                if total_size > MAX_FILE_SIZE:
+                    raise HTTPException(
+                        413,
+                        f"文件大小超过 {MAX_FILE_SIZE // 1024 // 1024}MB 限制"
+                    )
+                pdf_file.write(chunk)
 
-    # 校验 PDF
-    valid, msg = check_pdf_valid(pdf_path)
-    if not valid:
+        # 校验 PDF（含页数限制）
+        valid, msg = check_pdf_valid(pdf_path, max_pages=MAX_PAGES)
+        if not valid:
+            raise HTTPException(400, msg)
+
+        # 执行转换
+        success, result = pdf_to_word(pdf_path, output_path)
+        if not success:
+            raise HTTPException(500, result)
+
+    except HTTPException:
         shutil.rmtree(tmpdir, ignore_errors=True)
-        raise HTTPException(400, msg)
-
-    # 执行转换
-    success, result = pdf_to_word(pdf_path, output_path)
-    if not success:
+        raise
+    except Exception as exc:
         shutil.rmtree(tmpdir, ignore_errors=True)
-        raise HTTPException(500, result)
+        raise HTTPException(500, f"转换异常: {str(exc)}")
 
+    # 成功时通过 BackgroundTask 在响应发送后清理临时目录
     return FileResponse(
         result,
         filename=os.path.basename(result),

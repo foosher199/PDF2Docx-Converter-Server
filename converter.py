@@ -16,7 +16,7 @@ from pdf2docx import Converter
 ProgressCallback = Optional[Callable[[int, str], None]]
 
 
-def check_pdf_valid(pdf_path: str) -> tuple[bool, str]:
+def check_pdf_valid(pdf_path: str, max_pages: int = None) -> tuple[bool, str]:
     """检查 PDF 文件是否有效"""
     if not os.path.exists(pdf_path):
         return False, f"文件不存在: {pdf_path}"
@@ -28,6 +28,8 @@ def check_pdf_valid(pdf_path: str) -> tuple[bool, str]:
         pdf.close()
         if page_count == 0:
             return False, "PDF 没有页面"
+        if max_pages is not None and page_count > max_pages:
+            return False, f"PDF 页数超过 {max_pages} 页限制（当前 {page_count} 页）"
         return True, f"PDF 有效，共 {page_count} 页"
     except Exception as e:
         return False, f"PDF 解析失败: {str(e)}"
