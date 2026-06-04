@@ -8,6 +8,7 @@
 import os
 import shutil
 import tempfile
+import threading
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
@@ -23,6 +24,9 @@ app = FastAPI(
 MAX_FILE_SIZE = int(os.environ.get("MAX_FILE_SIZE", "52428800"))  # default 50MB
 CHUNK_SIZE = 64 * 1024  # 64KB
 MAX_PAGES = int(os.environ.get("MAX_PAGES", "100"))
+MAX_CONCURRENT_CONVERSIONS = int(os.environ.get("MAX_CONCURRENT_CONVERSIONS", "2"))
+
+convert_semaphore = threading.Semaphore(MAX_CONCURRENT_CONVERSIONS)
 
 
 @app.get("/health")
@@ -34,9 +38,14 @@ def health_check():
 def convert_pdf(file: UploadFile = File(...)):
     """
     上传 PDF，返回转换后的 docx 文件
+    最多允许 MAX_CONCURRENT_CONVERSIONS 个并发转换
     """
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(400, "Only PDF files are accepted")
+
+    # 尝试获取转换信号量，超限立即拒绝
+    if not convert_semaphore.acquire(blocking=False):
+        raise HTTPException(503, "服务正忙，请稍后重试")
 
     tmpdir = tempfile.mkdtemp()
     pdf_path = os.path.join(tmpdir, "input.pdf")
@@ -71,6 +80,8 @@ def convert_pdf(file: UploadFile = File(...)):
     except Exception as exc:
         shutil.rmtree(tmpdir, ignore_errors=True)
         raise HTTPException(500, f"转换异常: {str(exc)}")
+    finally:
+        convert_semaphore.release()
 
     # 成功时通过 BackgroundTask 在响应发送后清理临时目录
     return FileResponse(
