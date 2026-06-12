@@ -23,7 +23,7 @@ app = FastAPI(
     version="1.0.0",
 )
 
-MAX_FILE_SIZE = int(os.environ.get("MAX_FILE_SIZE", str(50 * 1024 * 1024)))
+MAX_FILE_SIZE = int(os.environ.get("MAX_FILE_SIZE", str(100 * 1024 * 1024)))
 CHUNK_SIZE = 64 * 1024
 # 兜底页数上限（主 API 已按用户权益校验；此处仅防异常请求）
 MAX_PAGES = int(os.environ.get("MAX_PAGES", "200"))
